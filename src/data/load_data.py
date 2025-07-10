@@ -2,10 +2,11 @@ import os
 import pandas as pd
 import struct
 
-# NUEVO: detecta la raíz del proyecto desde la ubicación del archivo actual
+# NEW: detects the project root from the current file's location
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 def read_binary(path):
+    print("load_data_project_root",path)
     ragged_array = []
     with open(path, "rb") as f:
         while True:
