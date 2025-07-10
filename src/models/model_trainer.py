@@ -1,6 +1,8 @@
 import torch
 from torch import nn
+
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from augmentation.signal_augmentations import augment_batch
 
 
 class Trainer:
@@ -24,12 +26,13 @@ class Trainer:
             X_batch = X_batch.to(self.device)
             y_batch = y_batch.to(self.device)
             lengths_batch = lengths_batch.to(self.device)
+            X_batch_aug, lengths_aug = augment_batch(X_batch, lengths_batch)
             
             # Fix: flatten y_batch to 1D
             y_batch = y_batch.view(-1)
             
             self.optimizer.zero_grad()
-            outputs = self.model(X_batch, lengths_batch)
+            outputs = self.model(X_batch_aug, lengths_aug)
             loss = self.criterion(outputs, y_batch)
             loss.backward()
             self.optimizer.step()
