@@ -7,12 +7,13 @@ from augmentation.signal_augmentations import augment_batch
 
 class Trainer:
     
-    def __init__(self, model, optimizer, criterion, device="cuda"):
+    def __init__(self, model, optimizer, criterion, augment_data: bool, device="cuda"):
         
         self.model = model.to(device)
         self.optimizer = optimizer
         self.criterion = criterion
         self.device = device
+        self.augment_data = augment_data
         
     def train_epoch(self, dataloader):
                 
@@ -27,12 +28,17 @@ class Trainer:
             y_batch = y_batch.to(self.device)
             lengths_batch = lengths_batch.to(self.device)
             X_batch_aug, lengths_aug = augment_batch(X_batch, lengths_batch)
-            
+       
             # Fix: flatten y_batch to 1D
             y_batch = y_batch.view(-1)
             
             self.optimizer.zero_grad()
-            outputs = self.model(X_batch_aug, lengths_aug)
+            
+            if self.augment_data:
+                outputs = self.model(X_batch_aug, lengths_aug)
+            else:
+                outputs = self.model(X_batch, lengths_batch)
+
             loss = self.criterion(outputs, y_batch)
             loss.backward()
             self.optimizer.step()
