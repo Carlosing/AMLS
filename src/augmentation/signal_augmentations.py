@@ -135,38 +135,40 @@ def augment_signal(signal, config=augmentation_config):
 
     return signal
 
-def augment_batch(X_batch, lengths, config=augmentation_config, sampling_rate=300):
+
+def augment_batch(X_batch, lengths, config=augmentation_config, sampling_rate=300, device="cuda"):
     """
     Apply augmentation to a batch of signals and extract optional features.
+    Supports GPU acceleration using the specified device (default: CUDA).
     """
     aug_batch = []
     new_lengths = []
     features_list = []
 
     for i in range(len(X_batch)):
-        # Cut to real length and convert to numpy
-        sig = X_batch[i][:lengths[i]].cpu().numpy()
-        
+        # Cut to real length and move to CPU for numpy ops
+        sig = X_batch[i][:lengths[i]].detach().cpu().numpy()
+
         # Augment
         aug_sig = augment_signal(sig, config)
-        
-        # Extract features if needed
+
+        # Extract features (remains on CPU)
         features = {}
         if config["biosppy"]["enabled"]:
             features.update(extract_biosppy_features(aug_sig, sampling_rate))
         if config["heartpy"]["enabled"]:
             features.update(extract_heartpy_features(aug_sig, sampling_rate))
 
-        # Convert back to tensor
-        aug_tensor = torch.tensor(aug_sig, dtype=torch.float32)
+        # Convert back to tensor and move to device
+        aug_tensor = torch.tensor(aug_sig, dtype=torch.float32).to(device)
         aug_batch.append(aug_tensor)
         new_lengths.append(len(aug_tensor))
         features_list.append(features)
 
-    # Pad sequences to same length
+    # Pad sequences to the same length (on device)
     max_len = max(new_lengths)
-    padded_batch = torch.zeros((len(aug_batch), max_len))
+    padded_batch = torch.zeros((len(aug_batch), max_len), dtype=torch.float32).to(device)
     for i, sig in enumerate(aug_batch):
         padded_batch[i, :len(sig)] = sig
 
-    return padded_batch, torch.tensor(new_lengths, dtype=torch.int32), features_list
+    return padded_batch, torch.tensor(new_lengths, dtype=torch.int32).to(device), features_list

@@ -27,15 +27,25 @@ class Trainer:
             X_batch = X_batch.to(self.device)
             y_batch = y_batch.to(self.device)
             lengths_batch = lengths_batch.to(self.device)
-            X_batch_aug, lengths_aug, features_list = augment_batch(X_batch, lengths_batch)
         
             # Fix: flatten y_batch to 1D
             y_batch = y_batch.view(-1)
             
             self.optimizer.zero_grad()
             
+            # Inside your training loop
             if self.augment_data:
+                # Move raw batch to device
+                X_batch = X_batch.to(self.device)
+                lengths_batch = lengths_batch.to(self.device)
+                y_batch = y_batch.to(self.device)
+
+                # Apply augmentation on GPU (augment_batch already handles device)
+                X_batch_aug, lengths_aug, features_list = augment_batch(X_batch, lengths_batch, device=self.device)
+                
+                # Forward pass on GPU
                 outputs = self.model(X_batch_aug, lengths_aug)
+
             else:
                 outputs = self.model(X_batch, lengths_batch)
 
