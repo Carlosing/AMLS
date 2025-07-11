@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from augmentation.signal_augmentations import augment_batch
+from src.augmentation.signal_augmentations import augment_batch
 
 
 class Trainer:
@@ -27,8 +27,8 @@ class Trainer:
             X_batch = X_batch.to(self.device)
             y_batch = y_batch.to(self.device)
             lengths_batch = lengths_batch.to(self.device)
-            X_batch_aug, lengths_aug = augment_batch(X_batch, lengths_batch)
-       
+            X_batch_aug, lengths_aug, features_list = augment_batch(X_batch, lengths_batch)
+        
             # Fix: flatten y_batch to 1D
             y_batch = y_batch.view(-1)
             
