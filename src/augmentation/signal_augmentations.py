@@ -1,174 +1,106 @@
-import numpy as np
-import random
 import torch
-from scipy.signal import resample
-from scipy.ndimage import shift
-from scipy.fft import fft, ifft
-
-import biosppy
-import heartpy as hp
+import torch.nn.functional as F
 
 # -------------------------------------------------
-# Updated, more conservative augmentation config
+# GPU-only augmentation config (all CPU features disabled)
 # -------------------------------------------------
 augmentation_config = {
     "time_stretch": {"enabled": True, "min": 0.98, "max": 1.02},
     "time_shift": {"enabled": True, "max_shift": 0.02},
-    "add_noise": {"enabled": True, "noise_level": 0.005},
+    "add_noise": {"enabled": False, "noise_level": 0.005},
     "amplitude_scale": {"enabled": True, "range": (0.95, 1.05)},
-    "random_crop": {"enabled": False},    # disabled by default (can harm ECG context)
-    "ifft_transform": {"enabled": False}, # disabled by default (can distort morphology)
-    "biosppy": {"enabled": True},
-    "heartpy": {"enabled": False}
+    "random_crop": {"enabled": False},
+    "ifft_transform": {"enabled": False}
 }
 
 # -------------------------------------------------
-# Augmentation functions
+# Pure GPU Augmentation functions
 # -------------------------------------------------
 
-def time_stretch(signal, stretch_factor):
-    """
-    Resample the signal to stretch/compress it in time.
-    """
-    length = int(len(signal) * stretch_factor)
-    return resample(signal, length)
+def time_stretch_gpu(signal, stretch_factor):
+    """Resample the signal to stretch/compress it in time using GPU interpolation"""
+    orig_len = signal.size(0)
+    new_len = max(1, int(orig_len * stretch_factor))
+    
+    signal = signal.unsqueeze(0).unsqueeze(0)  # Add batch and channel dims
+    signal = F.interpolate(signal, size=new_len, mode='linear', align_corners=False)
+    return signal.squeeze(0).squeeze(0)
 
-def time_shift(signal, shift_max):
-    """
-    Shift signal left/right by random fraction of total length.
-    """
-    shift_amt = int(len(signal) * random.uniform(-shift_max, shift_max))
-    return shift(signal, shift_amt, cval=0)
+def time_shift_gpu(signal, shift_max):
+    """Shift signal left/right with zero padding on GPU"""
+    n = signal.size(0)
+    shift_amt = int(n * torch.rand(1, device=signal.device).item() * (2 * shift_max) - shift_max)
+    
+    if shift_amt == 0:
+        return signal
+    
+    result = torch.zeros_like(signal)
+    if shift_amt > 0:
+        result[shift_amt:] = signal[:-shift_amt]
+    else:
+        result[:shift_amt] = signal[-shift_amt:]
+    return result
 
-def add_noise(signal, noise_level):
-    """
-    Add Gaussian noise.
-    """
-    noise = np.random.normal(0, noise_level, size=signal.shape)
+def add_noise_gpu(signal, noise_level):
+    """Add Gaussian noise directly on GPU"""
+    noise = torch.randn_like(signal) * noise_level * signal.std()
     return signal + noise
 
-def amplitude_scale(signal, scale_range):
-    """
-    Randomly scale signal amplitude.
-    """
-    factor = random.uniform(*scale_range)
+def amplitude_scale_gpu(signal, scale_range):
+    """Randomly scale signal amplitude on GPU"""
+    factor = torch.rand(1, device=signal.device).item() * (scale_range[1] - scale_range[0]) + scale_range[0]
     return signal * factor
 
-def random_crop(signal, crop_ratio):
-    """
-    Randomly crop a fraction of the signal.
-    """
-    crop_len = int(len(signal) * crop_ratio)
-    if crop_len >= len(signal):
-        return signal
-    start = random.randint(0, len(signal) - crop_len)
+def random_crop_gpu(signal, crop_ratio):
+    """Randomly crop a fraction of the signal on GPU"""
+    orig_len = signal.size(0)
+    crop_len = max(1, int(orig_len * crop_ratio))
+    start = int(torch.rand(1, device=signal.device).item() * (orig_len - crop_len))
     return signal[start:start+crop_len]
 
-def ifft_augment(signal, drop_ratio):
-    """
-    Zero out high frequencies in FFT.
-    """
-    spectrum = fft(signal)
-    cutoff = int(len(spectrum) * (1 - drop_ratio))
-    spectrum[cutoff:] = 0
-    return np.real(ifft(spectrum))
-
-# -------------------------------------------------
-# Feature extraction functions
-# -------------------------------------------------
-
-def extract_biosppy_features(signal, sampling_rate=300):
-    """
-    Use biosppy to extract HR features.
-    """
-    try:
-        out = biosppy.signals.ecg.ecg(signal=signal, sampling_rate=sampling_rate, show=False)
-        return {
-            "hr_mean": np.mean(out['heart_rate']) if len(out['heart_rate']) > 0 else 0,
-            "hr_std": np.std(out['heart_rate']) if len(out['heart_rate']) > 0 else 0,
-            "num_rpeaks": len(out['rpeaks'])
-        }
-    except Exception:
-        return {"hr_mean": 0, "hr_std": 0, "num_rpeaks": 0}
-
-def extract_heartpy_features(signal, sampling_rate=300):
-    """
-    Use heartpy to extract HRV features.
-    """
-    try:
-        wd, m = hp.process(signal, sample_rate=sampling_rate)
-        return {
-            "bpm": m.get('bpm', 0),
-            "ibi": m.get('ibi', 0),
-            "sdnn": m.get('sdnn', 0)
-        }
-    except Exception:
-        return {"bpm": 0, "ibi": 0, "sdnn": 0}
-
-# -------------------------------------------------
-# Augmentation pipeline
-# -------------------------------------------------
-
-def augment_signal(signal, config=augmentation_config):
-    """
-    Apply all enabled augmentations sequentially.
-    """
+def augment_signal_gpu(signal, config=augmentation_config):
+    """Pure GPU augmentation pipeline"""
+    signal = signal.clone()
+    
     if config["time_stretch"]["enabled"]:
-        factor = random.uniform(config["time_stretch"]["min"], config["time_stretch"]["max"])
-        signal = time_stretch(signal, factor)
+        factor = torch.rand(1, device=signal.device).item() * (config["time_stretch"]["max"] - config["time_stretch"]["min"]) + config["time_stretch"]["min"]
+        signal = time_stretch_gpu(signal, factor)
 
     if config["time_shift"]["enabled"]:
-        signal = time_shift(signal, config["time_shift"]["max_shift"])
+        signal = time_shift_gpu(signal, config["time_shift"]["max_shift"])
 
     if config["add_noise"]["enabled"]:
-        signal = add_noise(signal, config["add_noise"]["noise_level"])
+        signal = add_noise_gpu(signal, config["add_noise"]["noise_level"])
 
     if config["amplitude_scale"]["enabled"]:
-        signal = amplitude_scale(signal, config["amplitude_scale"]["range"])
+        signal = amplitude_scale_gpu(signal, config["amplitude_scale"]["range"])
 
     if config["random_crop"]["enabled"]:
-        crop_ratio = random.uniform(config["random_crop"].get("min", 0.95), config["random_crop"].get("max", 1.0))
-        signal = random_crop(signal, crop_ratio)
-
-    if config["ifft_transform"]["enabled"]:
-        signal = ifft_augment(signal, config["ifft_transform"]["drop_ratio"])
+        crop_ratio = torch.rand(1, device=signal.device).item() * (config["random_crop"].get("max", 1.0) - config["random_crop"].get("min", 0.95)) + config["random_crop"].get("min", 0.95)
+        signal = random_crop_gpu(signal, crop_ratio)
 
     return signal
 
-
-def augment_batch(X_batch, lengths, config=augmentation_config, sampling_rate=300, device="cuda"):
+def augment_batch(X_batch, lengths, config=augmentation_config, device="cuda"):
     """
-    Apply augmentation to a batch of signals and extract optional features.
-    Supports GPU acceleration using the specified device (default: CUDA).
+    Pure GPU batch augmentation - no CPU transfers
+    Returns:
+        padded_batch: (batch_size, max_len) tensor on GPU
+        new_lengths: (batch_size,) tensor of lengths on GPU
     """
     aug_batch = []
     new_lengths = []
-    features_list = []
 
-    for i in range(len(X_batch)):
-        # Cut to real length and move to CPU for numpy ops
-        sig = X_batch[i][:lengths[i]].detach().cpu().numpy()
+    for i in range(X_batch.size(0)):
+        sig = X_batch[i, :lengths[i]]
+        aug_sig = augment_signal_gpu(sig, config)
+        aug_batch.append(aug_sig)
+        new_lengths.append(aug_sig.size(0))
 
-        # Augment
-        aug_sig = augment_signal(sig, config)
-
-        # Extract features (remains on CPU)
-        features = {}
-        if config["biosppy"]["enabled"]:
-            features.update(extract_biosppy_features(aug_sig, sampling_rate))
-        if config["heartpy"]["enabled"]:
-            features.update(extract_heartpy_features(aug_sig, sampling_rate))
-
-        # Convert back to tensor and move to device
-        aug_tensor = torch.tensor(aug_sig, dtype=torch.float32).to(device)
-        aug_batch.append(aug_tensor)
-        new_lengths.append(len(aug_tensor))
-        features_list.append(features)
-
-    # Pad sequences to the same length (on device)
-    max_len = max(new_lengths)
-    padded_batch = torch.zeros((len(aug_batch), max_len), dtype=torch.float32).to(device)
+    # Pad sequences on GPU
+    max_len = max(new_lengths) if new_lengths else 0
+    padded_batch = torch.zeros((len(aug_batch), max_len), dtype=torch.float32, device=device)
     for i, sig in enumerate(aug_batch):
-        padded_batch[i, :len(sig)] = sig
+        padded_batch[i, :sig.size(0)] = sig
 
-    return padded_batch, torch.tensor(new_lengths, dtype=torch.int32).to(device), features_list
+    return padded_batch, torch.tensor(new_lengths, dtype=torch.int32, device=device)

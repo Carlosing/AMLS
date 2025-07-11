@@ -41,10 +41,11 @@ class Trainer:
                 y_batch = y_batch.to(self.device)
 
                 # Apply augmentation on GPU (augment_batch already handles device)
-                X_batch_aug, lengths_aug, features_list = augment_batch(X_batch, lengths_batch, device=self.device)
+                X_batch_aug, lengths_aug = augment_batch(X_batch, lengths_batch, device=self.device)
                 
-                # Forward pass on GPU
+                # # Forward pass on GPU
                 outputs = self.model(X_batch_aug, lengths_aug)
+                # outputs = self.model(X_batch, lengths_batch)
 
             else:
                 outputs = self.model(X_batch, lengths_batch)
