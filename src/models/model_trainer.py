@@ -7,7 +7,7 @@ from src.augmentation.signal_augmentations import augment_batch
 
 class Trainer:
     
-    def __init__(self, model, optimizer, criterion, augment_data: bool, device="cpu"):
+    def __init__(self, model, optimizer, criterion, augment_data: bool, device="cuda"):
         
         self.model = model.to(device)
         self.optimizer = optimizer
