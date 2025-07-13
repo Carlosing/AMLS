@@ -49,7 +49,7 @@ def lossy_fft_compress(signal, keep_ratio=0.1):
     reconstructed = np.real(ifft(compressed))
     return reconstructed
 
-def reduce_dataset(X, y, size_ratio=0.25, keep_ratio=0.1, save_path="reduced_dataset.npz"):
+def reduce_dataset_and_save(X, y, size_ratio=0.25, keep_ratio=0.1, x_save_path="X_train_reduced.bin", y_save_path="y_train_reduced.csv"):
     print(f"\n[🔧] Reducing dataset to {int(size_ratio*100)}% and compressing with keep_ratio={keep_ratio}")
     print(f"[ℹ] Original dataset size: {len(X)} samples")
 
@@ -59,50 +59,58 @@ def reduce_dataset(X, y, size_ratio=0.25, keep_ratio=0.1, save_path="reduced_dat
     print(f"[ℹ] Reduced dataset size: {len(X_reduced)} samples")
 
     X_compressed = []
-    maes, mses = [], []
 
     for i, signal in enumerate(X_reduced):
         compressed_signal = lossy_fft_compress(signal, keep_ratio=keep_ratio)
-        mae = np.mean(np.abs(signal - compressed_signal))
-        mse = np.mean((signal - compressed_signal)**2)
-        maes.append(mae)
-        mses.append(mse)
         X_compressed.append(compressed_signal.astype(np.float32))
 
-        if (i + 1) % 10 == 0 or (i + 1) == len(X_reduced):
-            print(f"[⏳] Processed {i+1}/{len(X_reduced)} signals — Current MAE: {mae:.4f}, MSE: {mse:.4f}")
+    save_compressed_to_binary(X_compressed, x_save_path)
+    save_labels_csv(y_reduced, y_save_path)
+    print(f"[✅] Saved reduced binary data to {x_save_path} and labels to {y_save_path}")
 
-    print(f"[📊] Mean MAE: {np.mean(maes):.4f}, Mean MSE: {np.mean(mses):.4f}")
+def save_compressed_to_binary(X_compressed, path):
+    with open(path, "wb") as f:
+        for signal in X_compressed:
+            scaled = np.clip(signal * 1000, -32768, 32767).astype(np.int16)
+            f.write(struct.pack("i", len(scaled)))                      # Length
+            f.write(struct.pack(f"{len(scaled)}h", *scaled))           # Data
 
-    np.savez_compressed(
-        save_path,
-        X=np.array(X_compressed, dtype=object),
-        y=np.array(y_reduced)
-    )
-    print(f"[✅] Saved reduced dataset to {save_path}")
+def save_labels_csv(y, filename):
+    pd.DataFrame(y).to_csv(filename, header=False, index=False)
 
-def load_reduced_dataset(path):
-    data = np.load(path, allow_pickle=True)
-    X = data["X"]
-    y = data["y"]
-    print(f"[📦] Loaded reduced dataset: {len(X)} samples")
-    return X, y
 
-def load_train_data_reduced(size_ratio=0.25, keep_ratio=0.1):
+def load_reduced_data():
+    x_path = os.path.join(PROJECT_ROOT, "data", "X_train_reduced.bin")
+    y_path = os.path.join(PROJECT_ROOT, "data", "y_train_reduced.csv")
     X_train, y_train = load_train_data()
-    save_path = os.path.join(PROJECT_ROOT, f"data/reduced_{int(size_ratio*100)}.npz")
-    reduce_dataset(X_train, y_train.values.ravel(), size_ratio=size_ratio, keep_ratio=keep_ratio, save_path=save_path)
-    return load_reduced_dataset(save_path)
+    reduce_dataset_and_save(
+            X_train,
+            y_train.values.ravel(),
+            size_ratio=0.25,
+            keep_ratio=0.1,
+            x_save_path=x_path,
+            y_save_path=y_path
+        )
+    X_train = read_binary(x_path)
+    y_train = pd.read_csv(y_path, header=None)
+
+    print(f"Loaded reduced X_train with {len(X_train)} sequences")
+    print(f"Loaded reduced y_train with shape {y_train.shape}")
+    return X_train, y_train
+
 
 # === Main ===
 if __name__ == "__main__":
-    use_new_method = False  # Change this flag to switch between old and new loading
-
+    use_new_method = True  # Change this flag to switch between old and new loading
+    X_train, y_train = load_train_data()
     if use_new_method:
-        # Use new reduced & compressed dataset loading
-        X_train, y_train = load_train_data_reduced(size_ratio=0.25, keep_ratio=0.1)
-        # If you want, you can add a similar function for test data in new style
-    else:
-        # Use old style loading
-        X_train, y_train = load_train_data()
-        X_test = load_test_data()
+        reduce_dataset_and_save(
+            X_train,
+            y_train.values.ravel(),
+            size_ratio=0.25,
+            keep_ratio=0.1,
+            x_save_path=os.path.join(PROJECT_ROOT, "data", "X_train_reduced.bin"),
+            y_save_path=os.path.join(PROJECT_ROOT, "data", "y_train_reduced.csv")
+        )
+    
+    X_test = load_test_data()
