@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from src.augmentation.signal_augmentations import augment_batch
+from sklearn.metrics import confusion_matrix, classification_report
 
 class Trainer:
     
@@ -158,3 +159,25 @@ class Trainer:
             self.model.load_state_dict(self.best_model_weights)
             
         return history
+    
+    def detailed_metrics(self, dataloader, class_names=None):
+        self.model.eval()
+        y_true = []
+        y_pred = []
+
+        with torch.no_grad():
+            for X_batch, lengths_batch, y_batch in dataloader:
+                X_batch = X_batch.to(self.device)
+                lengths_batch = lengths_batch.to(self.device)
+                y_batch = y_batch.to(self.device)
+
+                outputs = self.model(X_batch, lengths_batch)
+                _, predicted = torch.max(outputs, 1)
+
+                y_true.extend(y_batch.cpu().numpy())
+                y_pred.extend(predicted.cpu().numpy())
+
+        cm = confusion_matrix(y_true, y_pred)
+        report = classification_report(y_true, y_pred, target_names=class_names, digits=4)
+
+        return cm, report
