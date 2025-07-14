@@ -5,13 +5,18 @@ from src.augmentation.signal_augmentations import augment_batch
 
 class Trainer:
     
-    def __init__(self, model, optimizer, criterion, augment_data: bool, num_classes=4, device="cuda"):
+    def __init__(self, model, optimizer, criterion, augment_data: bool, num_classes=4, device="cuda", patience=5, min_delta=0.001):
         self.model = model.to(device)
         self.optimizer = optimizer
         self.criterion = criterion
         self.device = device
         self.augment_data = augment_data
         self.num_classes = num_classes
+        self.patience = patience
+        self.min_delta = min_delta  # Cambio mínimo considerado como mejora
+        self.best_val_loss = float('inf')
+        self.counter = 0
+        self.best_model_weights = None
         
     def _calculate_f1(self, y_true, y_pred):
         """
@@ -132,9 +137,24 @@ class Trainer:
                   f"Train Loss: {train_loss:.4f} - Train F1: {train_f1:.4f} - "
                   f"Val Loss: {val_loss:.4f} - Val F1: {val_f1:.4f}")
 
+            # Early stopping logic
+            if val_loss < self.best_val_loss - self.min_delta:
+                self.best_val_loss = val_loss
+                self.counter = 0
+                self.best_model_weights = self.model.state_dict().copy()  # Guardar mejores pesos
+            else:
+                self.counter += 1
+                if self.counter >= self.patience:
+                    print(f"\nEarly stopping triggered at epoch {epoch+1}")
+                    break
+
             history['train_loss'].append(train_loss)
             history['val_loss'].append(val_loss)
             history['train_f1'].append(train_f1)
             history['val_f1'].append(val_f1)
 
+        # Restaurar los mejores pesos encontrados
+        if self.best_model_weights is not None:
+            self.model.load_state_dict(self.best_model_weights)
+            
         return history

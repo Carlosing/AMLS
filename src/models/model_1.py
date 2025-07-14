@@ -5,25 +5,29 @@ import math as mathe
 
 
 
+
 class ECGNet(nn.Module):
     
-    def __init__(self, num_classes = 4,
-                 conv1_channels = 64,
-                 conv1_kernel =3,
-                 conv1_padding =1,
-                 conv2_channels = 32,
-                 conv2_kernel = 3,
+    def __init__(self, num_classes = None,
+                 conv1_channels = None,
+                 conv1_kernel =None,
+                 conv1_padding =None,
+                 conv2_channels = None,
+                 conv2_kernel = None,
                  conv2_padding = 1,
-                 lst_hidden_size = 128,
-                 lstm_num_layers = 1,
+                 lst_hidden_size = None,
+                 lstm_num_layers = None,
                  signal_length = None,
-                 n_fft = 512,
-                 hop_length = 256,
-                 device=None):
+                 n_fft = None,
+                 hop_length = None,
+                 device=None,
+                 dropout = None):
         
         super(ECGNet, self).__init__()
         
         self.device = device or torch.device("cpu")
+        
+        self.dropout_rate = dropout
         
         self.n_fft = n_fft
         
@@ -56,22 +60,28 @@ class ECGNet(nn.Module):
         self.conv1 = nn.Sequential(
             nn.Conv2d(1,conv1_channels, kernel_size= (3,3), padding = 1),
             nn.ReLU(),
-            nn.MaxPool2d((2,2))
+            nn.MaxPool2d((2,2)),
+            nn.Dropout2d(self.dropout_rate)
         )
         
         self.conv2 = nn.Sequential(nn.Conv2d(conv1_channels,conv2_channels, kernel_size=(3,3) , padding=1),
                                    nn.ReLU(),
-                                   nn.MaxPool2d((2,2))
+                                   nn.MaxPool2d((2,2)),
+                                   nn.Dropout2d(self.dropout_rate)
                                    )
         
         self.rnn = nn.LSTM(
             input_size = rnn_input_size,
             hidden_size = lst_hidden_size,
             num_layers = lstm_num_layers,
-            batch_first = True
+            batch_first = True,
+            dropout=self.dropout_rate if lstm_num_layers > 1 else 0  
         )
         
-        self.fc = nn.Linear(lst_hidden_size, num_classes)
+        self.fc = nn.Sequential(
+            nn.Dropout(self.dropout_rate),  # Dropout antes de la capa final
+            nn.Linear(lst_hidden_size, num_classes)
+        )
         
     def _conv_output_size(self, input_size, kernel_size, padding, stride=1):
         return mathe.floor((input_size + 2 * padding - kernel_size) / stride + 1)

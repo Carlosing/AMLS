@@ -4,7 +4,7 @@ import pandas as pd
 
 def stratified_split_pad_torch(X, y, val_ratio=0.1, padding_value=0):
     """
-    Performs a stratified split and returns PyTorch tensors:
+    Realiza un split estratificado y devuelve tensores PyTorch:
     X_train_padded, X_val_padded, lengths_train, lengths_val, y_train_split, y_val_split
     """
     X = np.array(X, dtype=object)
@@ -26,7 +26,8 @@ def stratified_split_pad_torch(X, y, val_ratio=0.1, padding_value=0):
     y_val_split = y[val_indices]
 
     def pad_sequences(sequences, padding_value=0.0):
-        # Convert and normalize
+    
+    # Convertimos y normalizamos
         norm_seqs = []
         lengths = torch.zeros(len(sequences), dtype=torch.int32)
 
@@ -46,10 +47,12 @@ def stratified_split_pad_torch(X, y, val_ratio=0.1, padding_value=0):
 
         return padded, lengths
 
+
+
     X_train_padded, lengths_train = pad_sequences(X_train_split, padding_value)
     X_val_padded, lengths_val = pad_sequences(X_val_split, padding_value)
 
-    # Convert labels to tensors (int64 for classification)
+    # convert labels to tensors (int64 for classification)
     y_train_split = torch.tensor(y_train_split, dtype=torch.int64)
     y_val_split = torch.tensor(y_val_split, dtype=torch.int64)
 
