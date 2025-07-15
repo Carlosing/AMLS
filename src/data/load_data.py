@@ -4,6 +4,7 @@ import struct
 import numpy as np
 from scipy.fft import fft, ifft
 from sklearn.model_selection import train_test_split
+import torch
 
 # Detect project root
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -104,6 +105,36 @@ def load_train_data_reduced(size_ratio=0.25, keep_ratio=0.1):
     
     print(f"[✓] Returned X_train as list of arrays, y_train as Pandas Series")
     return X, y
+
+class EDGCDataset(torch.utils.data.Dataset):
+
+    def __init__(self, X, lengths, y):
+
+        self.X = X
+
+        self.lengths = lengths
+
+        self.y = y
+
+    def __len__(self):
+
+        return len(self.X)
+
+    def __getitem__(self, idx):
+
+        return self.X[idx], self.lengths[idx], self.y[idx]
+
+
+class EDGCTestDataset(torch.utils.data.Dataset):
+    def __init__(self, X, lengths):
+        self.X = X
+        self.lengths = lengths
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.lengths[idx]
 
 # === Main ===
 if __name__ == "__main__":

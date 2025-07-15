@@ -1,0 +1,76 @@
+import os
+import sys
+import numpy as np
+import torch as torch
+from collections import Counter
+
+# Add project root path if not already present
+PROJECT_ROOT = os.path.abspath("..")  # move up one level from notebooks/
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+# Visual confirmation
+print("[✓] Project located at:", PROJECT_ROOT)
+
+from src.data.load_data import load_train_data, load_test_data, EDGCDataset
+from src.data.stratified_split import stratified_split_pad_torch
+
+def print_class_stats(y, name="Dataset"):
+    """Print basic class statistics"""
+    # Convert to list of scalar values
+    if isinstance(y, np.ndarray):
+        y = y.flatten().tolist()
+    elif torch.is_tensor(y):
+        y = y.flatten().tolist()
+    elif isinstance(y, list):
+        y = [item.item() if torch.is_tensor(item) else item for item in y]
+    
+    class_counts = Counter(y)
+    total = len(y)
+    
+    print(f"\nClass statistics - {name}:")
+    print(f"Total number of records: {total}")
+    print(f"Number of classes: {len(class_counts)}")
+    
+    print("\nRecords per class:")
+    for class_label, count in sorted(class_counts.items()):
+        print(f"  Class {class_label}: {count} records ({count/total:.1%})")
+
+
+def main():
+
+    print("Loading data...")
+    X_train, y_train = load_train_data()
+
+    durations = np.array([len(x) / 300 for x in X_train])
+
+    print("Splitting and padding...")
+
+    X_train, X_val, lengths_train, lengths_val, y_train, y_val = (
+        stratified_split_pad_torch(X_train, y_train)
+    )
+
+    print_class_stats(y_train, "Training set")
+    print_class_stats(y_val, "Validation set")
+    
+    train_dataset = EDGCDataset(X_train, lengths_train, y_train)
+    val_dataset = EDGCDataset(X_val, lengths_val, y_val)
+
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=32, shuffle=True
+    )
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=32)
+
+    for X_batch, lengths_batch, y_batch in train_loader:
+        print(
+            f"Batch shapes → X: {X_batch.shape}, lengths: {lengths_batch.shape}, y: {y_batch.shape}"
+        )
+        break
+
+    print("Data preparation completed.")
+
+    return train_loader, val_loader, X_train.shape[1]
+
+
+if __name__ == "__main__":
+    main()

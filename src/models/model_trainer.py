@@ -181,3 +181,4 @@ class Trainer:
         report = classification_report(y_true, y_pred, target_names=class_names, digits=4)
 
         return cm, report
+    
