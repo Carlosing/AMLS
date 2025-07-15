@@ -4,6 +4,7 @@
 
 ```
 
+
 project\_root/
 │
 ├── data/
@@ -19,6 +20,7 @@ project\_root/
 │       └── load\_data.py   # This script
 │
 └── README.md
+
 
 ````
 
