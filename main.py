@@ -13,6 +13,11 @@ def main():
     parser.add_argument('--evaluate_model2', action='store_true', help='Evaluate model')
     parser.add_argument('--augmented_model1', action='store_true', help='Evaluate model')
     parser.add_argument('--augmented_model2', action='store_true', help='Evaluate model')
+    parser.add_argument('--lossless_model1', action='store_true', help='Evaluate model')
+    parser.add_argument('--lossless_model2', action='store_true', help='Evaluate model')
+    
+    
+    
     
     args = parser.parse_args()
 
@@ -56,6 +61,20 @@ def main():
     if args.augmented_model2:
         from Data_augmentation_3.model2_augmented import main as eval
         from preparation_1.data_preparation import main as data
+        
+        train_loader, val_loader,signal_size = data()
+        eval(train_loader, val_loader, signal_size)
+        
+    if args.lossless_model1:
+        from Modelling_2.model1_evaluate import main as eval
+        from Data_reduction_4.data_losless import main as data
+        
+        train_loader, val_loader,signal_size = data()
+        eval(train_loader, val_loader, signal_size)
+        
+    if args.lossless_model2:
+        from Modelling_2.model2_evaluate import main as eval
+        from Data_reduction_4.data_losless import main as data
         
         train_loader, val_loader,signal_size = data()
         eval(train_loader, val_loader, signal_size)
